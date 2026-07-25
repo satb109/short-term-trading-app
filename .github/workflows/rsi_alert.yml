@@ -1,0 +1,30 @@
+name: RSI 20 Crossover Alert
+
+on:
+  schedule:
+    # 13:30 UTC = 19:00 (7:00 PM) IST, Monday-Friday.
+    # India has no daylight saving, so this offset never shifts.
+    - cron: '30 13 * * 1-5'
+  workflow_dispatch: {}   # lets you trigger a manual test run from the Actions tab
+
+jobs:
+  check-rsi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run RSI check
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        run: python rsi_alert.py
