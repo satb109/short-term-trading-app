@@ -1,24 +1,18 @@
 """
-RSI(20) Upward-Crossover Alert
+RSI(20) Upward-Crossover Check
 ------------------------------
-Checks a fixed list of NSE-listed stocks daily and emails you the ones whose
-14-period RSI has just crossed UP through 20 (i.e. yesterday's RSI was below
-20 and today's RSI is at/above 20 - a classic "exiting oversold" signal).
+Checks a fixed list of NSE-listed stocks and PRINTS to the console the ones
+whose 14-period RSI has just crossed UP through 20 (i.e. yesterday's RSI was
+below 20 and today's RSI is at/above 20 - a classic "exiting oversold" signal).
 
-Designed to be run once per weekday by GitHub Actions (see rsi_alert.yml),
-but it will also run fine locally: `python rsi_alert.py`.
+Run it any time with: python rsi_alert.py
 
-Required environment variables (set as GitHub Secrets in production):
-    GMAIL_ADDRESS       - the Gmail address the alert is sent FROM
-    GMAIL_APP_PASSWORD  - a 16-character Gmail App Password (not your login password)
-    RECIPIENT_EMAIL     - the address to send the alert TO (can be the same Gmail address)
+If scheduled via GitHub Actions, the output shows up in that run's log under
+the Actions tab (not on your local screen) - see the README for details.
 """
 
-import os
-import smtplib
 import sys
 from datetime import datetime
-from email.mime.text import MIMEText
 
 import pandas as pd
 import yfinance as yf
@@ -43,10 +37,6 @@ TICKERS = {
 
 RSI_PERIOD = 14
 RSI_THRESHOLD = 20
-
-# If True, you get an email every run (even "no crossovers today").
-# If False, you only get emailed when at least one stock actually crosses.
-ALWAYS_SEND_EMAIL = False
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +85,7 @@ def check_ticker(ticker: str) -> dict | None:
 
     return {
         "ticker": ticker,
+        "name": TICKERS.get(ticker, ticker),
         "prev_rsi": prev_rsi,
         "curr_rsi": curr_rsi,
         "crossed_up": crossed_up,
@@ -102,49 +93,38 @@ def check_ticker(ticker: str) -> dict | None:
     }
 
 
-def build_email_body(results: list[dict], crossed: list[dict]) -> str:
-    lines = []
-    lines.append(f"RSI(20) upward-crossover check - {datetime.now().strftime('%Y-%m-%d %H:%M')} IST")
-    lines.append("")
+def display_results(results: list[dict]) -> None:
+    crossed = [r for r in results if r["crossed_up"]]
+
+    print("=" * 60)
+    print(f"RSI(20) upward-crossover check - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print("=" * 60)
 
     if crossed:
-        lines.append(f"{len(crossed)} stock(s) crossed ABOVE RSI 20 today:")
-        lines.append("")
+        print(f"\n*** {len(crossed)} stock(s) CROSSED ABOVE RSI 20 today ***\n")
         for r in crossed:
-            name = TICKERS.get(r["ticker"], r["ticker"])
-            lines.append(
-                f"  - {name} ({r['ticker']}): RSI {r['prev_rsi']:.1f} -> {r['curr_rsi']:.1f} "
-                f"(as of {r['as_of']})"
-            )
-        lines.append("")
+            print(f"  >> {r['name']} ({r['ticker']}): {r['prev_rsi']:.1f} -> {r['curr_rsi']:.1f}  (as of {r['as_of']})")
     else:
-        lines.append("No stocks crossed above RSI 20 today.")
-        lines.append("")
+        print("\nNo stocks crossed above RSI 20 today.")
 
-    lines.append("Full RSI snapshot (all tracked stocks):")
-    for r in results:
-        name = TICKERS.get(r["ticker"], r["ticker"])
-        flag = " <-- CROSSED" if r["crossed_up"] else ""
-        lines.append(f"  - {name} ({r['ticker']}): RSI {r['curr_rsi']:.1f}{flag}")
+    print("\nFull RSI snapshot (all tracked stocks):")
+    print("-" * 60)
 
-    return "\n".join(lines)
+    table = pd.DataFrame(
+        [
+            {
+                "Ticker": r["ticker"],
+                "Name": r["name"],
+                "RSI (prev)": round(r["prev_rsi"], 1),
+                "RSI (today)": round(r["curr_rsi"], 1),
+                "Crossed?": "YES" if r["crossed_up"] else "",
+            }
+            for r in results
+        ]
+    ).sort_values("RSI (today)")
 
-
-def send_email(subject: str, body: str) -> None:
-    sender = os.environ["GMAIL_ADDRESS"]
-    app_password = os.environ["GMAIL_APP_PASSWORD"]
-    recipient = os.environ["RECIPIENT_EMAIL"]
-
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = sender
-    msg["To"] = recipient
-
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(sender, app_password)
-        server.sendmail(sender, [recipient], msg.as_string())
-
-    print("Email sent.")
+    print(table.to_string(index=False))
+    print("-" * 60)
 
 
 def main() -> None:
@@ -154,24 +134,11 @@ def main() -> None:
         if info is not None:
             results.append(info)
 
-    crossed = [r for r in results if r["crossed_up"]]
-
-    # Always print a log to the GitHub Actions console, regardless of email settings.
-    print(build_email_body(results, crossed))
-
     if not results:
-        print("[ERROR] No tickers returned usable data - not sending email.", file=sys.stderr)
+        print("[ERROR] No tickers returned usable data.", file=sys.stderr)
         sys.exit(1)
 
-    if crossed or ALWAYS_SEND_EMAIL:
-        subject = (
-            f"RSI Alert: {len(crossed)} stock(s) crossed above 20"
-            if crossed
-            else "RSI check: no crossovers today"
-        )
-        send_email(subject, build_email_body(results, crossed))
-    else:
-        print("No crossovers and ALWAYS_SEND_EMAIL is False - no email sent.")
+    display_results(results)
 
 
 if __name__ == "__main__":
