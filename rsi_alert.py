@@ -11,6 +11,7 @@ If scheduled via GitHub Actions, the output shows up in that run's log under
 the Actions tab (not on your local screen) - see the README for details.
 """
 
+import argparse
 import sys
 from datetime import datetime
 
@@ -74,6 +75,35 @@ TICKERS = {
     "WIPRO.NS": "Wipro",
 }
 
+NIFTY_NEXT_50_TICKERS = {
+    "AARTIIND.NS": "Aarti Industries",
+    "ALKEM.NS": "Alkem Laboratories",
+    "AUROPHARMA.NS": "Aurobindo Pharma",
+    "BANDHANBNK.NS": "Bandhan Bank",
+    "BANKBARODA.NS": "Bank of Baroda",
+    "BHEL.NS": "Bharat Heavy Electricals",
+    "BIOCON.NS": "Biocon",
+    "CANBK.NS": "Canara Bank",
+    "CHOLAFIN.NS": "Cholamandalam Investment and Finance Company",
+    "COFORGE.NS": "Coforge",
+    "DABUR.NS": "Dabur India",
+    "DELHIVERY.NS": "Delhivery",
+    "ESCORTS.NS": "Escorts Kubota",
+    "GODREJPROP.NS": "Godrej Properties",
+    "HINDCOPPER.NS": "Hindustan Copper",
+    "INDUSTOWER.NS": "Indus Towers",
+    "IRCTC.NS": "Indian Railway Catering and Tourism Corporation",
+    "LUPIN.NS": "Lupin",
+    "MUTHOOTFIN.NS": "Muthoot Finance",
+    "PFC.NS": "Power Finance Corporation",
+    "PIIND.NS": "PI Industries",
+    "POLYCAB.NS": "Polycab India",
+    "SRF.NS": "SRF",
+    "VOLTAS.NS": "Voltas",
+}
+
+NIFTY_100_TICKERS = {**TICKERS, **NIFTY_NEXT_50_TICKERS}
+
 RSI_PERIOD = 14
 RSI_THRESHOLD = 30
 
@@ -99,7 +129,7 @@ def compute_rsi(close: pd.Series, period: int = RSI_PERIOD) -> pd.Series:
 # Core logic
 # ---------------------------------------------------------------------------
 
-def check_ticker(ticker: str) -> dict | None:
+def check_ticker(ticker: str, ticker_map: dict[str, str] | None = None) -> dict | None:
     """Returns a dict with rsi info if data was usable, else None."""
     # 3 months of daily data comfortably covers the 14-period warm-up
     data = yf.download(ticker, period="3mo", interval="1d", progress=False, auto_adjust=True)
@@ -142,7 +172,7 @@ def check_ticker(ticker: str) -> dict | None:
 
     return {
         "ticker": ticker,
-        "name": TICKERS.get(ticker, ticker),
+        "name": (ticker_map or TICKERS).get(ticker, ticker),
         "prev_rsi": prev_rsi,
         "curr_rsi": curr_rsi,
         "crossed_up": crossed_up,
@@ -150,30 +180,31 @@ def check_ticker(ticker: str) -> dict | None:
     }
 
 
-def display_results(results: list[dict]) -> None:
+def format_results(results: list[dict]) -> str:
     crossed = [r for r in results if r["crossed_up"]]
     below_threshold = [r for r in results if r["curr_rsi"] < RSI_THRESHOLD]
 
-    print("=" * 60)
-    print(f"RSI({RSI_THRESHOLD}) upward-crossover check - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print("=" * 60)
+    lines = []
+    lines.append("=" * 60)
+    lines.append(f"RSI({RSI_THRESHOLD}) upward-crossover check - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    lines.append("=" * 60)
 
     if crossed:
-        print(f"\n*** {len(crossed)} stock(s) CROSSED ABOVE RSI {RSI_THRESHOLD} today ***\n")
+        lines.append(f"\n*** {len(crossed)} stock(s) CROSSED ABOVE RSI {RSI_THRESHOLD} today ***\n")
         for r in crossed:
-            print(f"  >> {r['name']} ({r['ticker']}): {r['prev_rsi']:.1f} -> {r['curr_rsi']:.1f}  (as of {r['as_of']})")
+            lines.append(f"  >> {r['name']} ({r['ticker']}): {r['prev_rsi']:.1f} -> {r['curr_rsi']:.1f}  (as of {r['as_of']})")
     else:
-        print(f"\nNo stocks crossed above RSI {RSI_THRESHOLD} today.")
+        lines.append(f"\nNo stocks crossed above RSI {RSI_THRESHOLD} today.")
 
     if below_threshold:
-        print(f"\n*** {len(below_threshold)} stock(s) with RSI below {RSI_THRESHOLD} today ***\n")
+        lines.append(f"\n*** {len(below_threshold)} stock(s) with RSI below {RSI_THRESHOLD} today ***\n")
         for r in sorted(below_threshold, key=lambda x: x["curr_rsi"]):
-            print(f"  >> {r['name']} ({r['ticker']}): RSI {r['curr_rsi']:.1f}")
+            lines.append(f"  >> {r['name']} ({r['ticker']}): RSI {r['curr_rsi']:.1f}")
     else:
-        print(f"\nNo stocks are below RSI {RSI_THRESHOLD} today.")
+        lines.append(f"\nNo stocks are below RSI {RSI_THRESHOLD} today.")
 
-    print("\nFull RSI snapshot (all tracked stocks):")
-    print("-" * 60)
+    lines.append("\nFull RSI snapshot (all tracked stocks):")
+    lines.append("-" * 60)
 
     table = pd.DataFrame(
         [
@@ -189,16 +220,32 @@ def display_results(results: list[dict]) -> None:
         ]
     ).sort_values("RSI (today)")
 
-    print(table.to_string(index=False))
-    print("-" * 60)
+    lines.append(table.to_string(index=False))
+    lines.append("-" * 60)
+    return "\n".join(lines)
+
+
+def display_results(results: list[dict]) -> None:
+    print(format_results(results))
+
+
+def collect_results(tickers: dict[str, str] | None = None) -> list[dict]:
+    results = []
+    selected_tickers = tickers or TICKERS
+    for ticker in selected_tickers:
+        info = check_ticker(ticker, selected_tickers)
+        if info is not None:
+            results.append(info)
+    return results
 
 
 def main() -> None:
-    results = []
-    for ticker in TICKERS:
-        info = check_ticker(ticker)
-        if info is not None:
-            results.append(info)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ticker-set", choices=["nifty50", "nifty-next-50"], default="nifty50")
+    args = parser.parse_args()
+
+    tickers = TICKERS if args.ticker_set == "nifty50" else NIFTY_NEXT_50_TICKERS
+    results = collect_results(tickers)
 
     if not results:
         print("[ERROR] No tickers returned usable data.", file=sys.stderr)
