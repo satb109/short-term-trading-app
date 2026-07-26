@@ -67,7 +67,7 @@ def index():
     output = ""
     if request.method == "POST":
         output = run_report("nifty50")
-    return render_template_string(HTML, output=output, title="RSI Alert Nifty 50")
+    return render_template_string(HTML, output=output, title="")
 
 
 @app.route("/nifty-next-50", methods=["GET", "POST"])
@@ -75,7 +75,7 @@ def nifty_next_50():
     output = ""
     if request.method == "POST":
         output = run_report("nifty-next-50")
-    return render_template_string(HTML, output=output, title="RSI Alert Nifty Next 50")
+    return render_template_string(HTML, output=output, title="")
 
 
 @app.route("/30-day-mva-alert", methods=["GET", "POST"])
@@ -83,7 +83,7 @@ def thirty_day_mva_alert():
     output = ""
     if request.method == "POST":
         output = run_report("nifty100", report_type="mva")
-    return render_template_string(HTML, output=output, title="30 Day MVA Alert")
+    return render_template_string(HTML, output=output, title="")
 
 
 if __name__ == "__main__":
