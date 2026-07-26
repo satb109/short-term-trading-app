@@ -21,22 +21,61 @@ import yfinance as yf
 # Config
 # ---------------------------------------------------------------------------
 
-# NSE ticker -> display name. yfinance needs the ".NS" suffix for NSE stocks.
+# NIFTY 50 ticker -> display name. yfinance needs the ".NS" suffix for NSE stocks.
 TICKERS = {
-    "TITAN.NS": "Titan Company",
-    "NH.NS": "Narayana Hrudayalaya",
-    "BAJAJHLDNG.NS": "Bajaj Holdings & Investment",
-    "BAJFINANCE.NS": "Bajaj Finance",
-    "RELIANCE.NS": "Reliance Industries",
-    "LT.NS": "Larsen & Toubro",
+    "ADANIENT.NS": "Adani Enterprises",
+    "ADANIPORTS.NS": "Adani Ports and Special Economic Zone",
     "APOLLOHOSP.NS": "Apollo Hospitals Enterprise",
-    "ABB.NS": "ABB India",
-    "HAL.NS": "Hindustan Aeronautics",
-    "BSE.NS": "BSE Limited",
+    "ASIANPAINT.NS": "Asian Paints",
+    "AXISBANK.NS": "Axis Bank",
+    "BAJAJAUTO.NS": "Bajaj Auto",
+    "BAJFINANCE.NS": "Bajaj Finance",
+    "BAJAJFINSV.NS": "Bajaj Finserv",
+    "BPCL.NS": "Bharat Petroleum",
+    "BHARTIARTL.NS": "Bharti Airtel",
+    "BRITANNIA.NS": "Britannia Industries",
+    "CIPLA.NS": "Cipla",
+    "COALINDIA.NS": "Coal India",
+    "DIVISLAB.NS": "Divi's Laboratories",
+    "DRREDDY.NS": "Dr. Reddy's Laboratories",
+    "EICHERMOT.NS": "Eicher Motors",
+    "GRASIM.NS": "Grasim Industries",
+    "HCLTECH.NS": "HCL Technologies",
+    "HDFCBANK.NS": "HDFC Bank",
+    "HDFCLIFE.NS": "HDFC Life",
+    "HEROMOTOCO.NS": "Hero MotoCorp",
+    "HINDALCO.NS": "Hindalco Industries",
+    "HINDUNILVR.NS": "Hindustan Unilever",
+    "ICICIBANK.NS": "ICICI Bank",
+    "ITC.NS": "ITC",
+    "INDUSINDBK.NS": "IndusInd Bank",
+    "INFY.NS": "Infosys",
+    "JSWSTEEL.NS": "JSW Steel",
+    "KOTAKBANK.NS": "Kotak Mahindra Bank",
+    "LT.NS": "Larsen & Toubro",
+    "M&M.NS": "Mahindra & Mahindra",
+    "MARUTI.NS": "Maruti Suzuki",
+    "NTPC.NS": "NTPC",
+    "NESTLEIND.NS": "Nestle India",
+    "ONGC.NS": "Oil and Natural Gas Corporation",
+    "POWERGRID.NS": "Power Grid Corporation of India",
+    "RELIANCE.NS": "Reliance Industries",
+    "SBILIFE.NS": "SBI Life Insurance",
+    "SHRIRAMFIN.NS": "Shriram Finance",
+    "SUNPHARMA.NS": "Sun Pharmaceutical Industries",
+    "TATACONSUM.NS": "Tata Consumer Products",
+    "TATAMOTORS.NS": "Tata Motors",
+    "TATASTEEL.NS": "Tata Steel",
+    "TCS.NS": "Tata Consultancy Services",
+    "TECHM.NS": "Tech Mahindra",
+    "TITAN.NS": "Titan Company",
+    "ULTRACEMCO.NS": "UltraTech Cement",
+    "UPL.NS": "UPL",
+    "WIPRO.NS": "Wipro",
 }
 
 RSI_PERIOD = 14
-RSI_THRESHOLD = 20
+RSI_THRESHOLD = 30
 
 
 # ---------------------------------------------------------------------------
@@ -113,17 +152,25 @@ def check_ticker(ticker: str) -> dict | None:
 
 def display_results(results: list[dict]) -> None:
     crossed = [r for r in results if r["crossed_up"]]
+    below_threshold = [r for r in results if r["curr_rsi"] < RSI_THRESHOLD]
 
     print("=" * 60)
-    print(f"RSI(20) upward-crossover check - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"RSI({RSI_THRESHOLD}) upward-crossover check - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print("=" * 60)
 
     if crossed:
-        print(f"\n*** {len(crossed)} stock(s) CROSSED ABOVE RSI 20 today ***\n")
+        print(f"\n*** {len(crossed)} stock(s) CROSSED ABOVE RSI {RSI_THRESHOLD} today ***\n")
         for r in crossed:
             print(f"  >> {r['name']} ({r['ticker']}): {r['prev_rsi']:.1f} -> {r['curr_rsi']:.1f}  (as of {r['as_of']})")
     else:
-        print("\nNo stocks crossed above RSI 20 today.")
+        print(f"\nNo stocks crossed above RSI {RSI_THRESHOLD} today.")
+
+    if below_threshold:
+        print(f"\n*** {len(below_threshold)} stock(s) with RSI below {RSI_THRESHOLD} today ***\n")
+        for r in sorted(below_threshold, key=lambda x: x["curr_rsi"]):
+            print(f"  >> {r['name']} ({r['ticker']}): RSI {r['curr_rsi']:.1f}")
+    else:
+        print(f"\nNo stocks are below RSI {RSI_THRESHOLD} today.")
 
     print("\nFull RSI snapshot (all tracked stocks):")
     print("-" * 60)
@@ -135,6 +182,7 @@ def display_results(results: list[dict]) -> None:
                 "Name": r["name"],
                 "RSI (prev)": round(r["prev_rsi"], 1),
                 "RSI (today)": round(r["curr_rsi"], 1),
+                "RSI Below 30": "Yes" if r["curr_rsi"] < RSI_THRESHOLD else "No",
                 "Crossed?": "YES" if r["crossed_up"] else "No",
             }
             for r in results
