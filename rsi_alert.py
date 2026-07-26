@@ -65,11 +65,29 @@ def check_ticker(ticker: str) -> dict | None:
     # 3 months of daily data comfortably covers the 14-period warm-up
     data = yf.download(ticker, period="3mo", interval="1d", progress=False, auto_adjust=True)
 
-    if data.empty or "Close" not in data:
+    if data.empty:
         print(f"[WARN] No data returned for {ticker}, skipping.")
         return None
 
-    close = data["Close"].dropna()
+    close_col = None
+    if "Close" in data:
+        close_col = data["Close"]
+    elif isinstance(data.columns, pd.MultiIndex) and ("Close", ticker) in data.columns:
+        close_col = data[("Close", ticker)]
+    elif isinstance(data.columns, pd.MultiIndex) and ("Close", slice(None)) in data.columns:
+        close_col = data["Close"].iloc[:, 0]
+
+    if close_col is None:
+        print(f"[WARN] No Close data returned for {ticker}, skipping.")
+        return None
+
+    if isinstance(close_col, pd.DataFrame):
+        if close_col.shape[1] != 1:
+            print(f"[WARN] Unexpected Close data shape for {ticker}, skipping.")
+            return None
+        close_col = close_col.iloc[:, 0]
+
+    close = pd.Series(close_col).dropna()
     if len(close) < RSI_PERIOD + 2:
         print(f"[WARN] Not enough history for {ticker} ({len(close)} rows), skipping.")
         return None
@@ -117,7 +135,7 @@ def display_results(results: list[dict]) -> None:
                 "Name": r["name"],
                 "RSI (prev)": round(r["prev_rsi"], 1),
                 "RSI (today)": round(r["curr_rsi"], 1),
-                "Crossed?": "YES" if r["crossed_up"] else "",
+                "Crossed?": "YES" if r["crossed_up"] else "No",
             }
             for r in results
         ]
